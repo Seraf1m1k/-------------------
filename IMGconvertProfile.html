@@ -1,0 +1,335 @@
+Cерафим, [24.09.2025 13:07]
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Editor avatar — debug friendly</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; display:flex; gap:16px; flex-direction:column; align-items:center; padding:20px; }
+  h1 { font-size:18px; margin:0 0 8px 0; }
+  #frame {
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    border: 3px solid #333;
+    overflow: hidden;
+    position: relative;
+    background: #efefef;
+    touch-action: none; /* важно для pointer/pinch */
+    user-select: none;
+  }
+  #preview { position:absolute; left:0; top:0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+  .controls { display:flex; gap:8px; align-items:center; }
+  button { padding:8px 12px; cursor:pointer; }
+  #result { border-radius:50%; border:2px solid #333; }
+  #log { width:320px; max-height:140px; overflow:auto; background:#111; color:#0f0; font-family:monospace; font-size:12px; padding:8px; border-radius:6px; }
+  .hint { font-size:13px; color:#555; max-width:420px; text-align:center; }
+</style>
+</head>
+<body>
+  <h1>Редактор аватарки — рабочий (drag, pinch, wheel)</h1>
+
+  <div class="controls">
+    <input type="file" id="fileInput" accept="image/*">
+    <button id="cropBtn">Обрезать</button>
+    <button id="downloadBtn" disabled>Скачать</button>
+    <button id="resetBtn">Сброс</button>
+  </div>
+
+  <div id="frame" aria-label="frame">
+    <img id="preview" alt="preview">
+  </div>
+
+  <canvas id="result" width="200" height="200"></canvas>
+
+  <div class="hint">Перетащи фото внутри круга. Масштаб: колесо мыши или двумя пальцами (pinch). На мобильном — два пальца для масштабирования.</div>
+
+  <pre id="log">log:\n</pre>
+
+<script>
+(function(){
+  const fileInput = document.getElementById('fileInput');
+  const preview = document.getElementById('preview');
+  const frame = document.getElementById('frame');
+  const cropBtn = document.getElementById('cropBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const result = document.getElementById('result');
+  const ctx = result.getContext('2d');
+  const logEl = document.getElementById('log');
+
+  const frameW = frame.clientWidth;
+  const frameH = frame.clientHeight;
+
+  let scale = 1;
+  let offsetX = 0, offsetY = 0; // in CSS pixels (frame coords)
+  let isDragging = false;
+  let dragStartX = 0, dragStartY = 0;
+
+  // for pinch
+  const pointers = new Map();
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+
+  const MIN_SCALE = 0.2;
+  const MAX_SCALE = 10;
+
+  function log(...args){
+    // console + visible log
+    console.log(...args);
+    logEl.textContent = logEl.textContent + args.map(a=>typeof a === 'object'?JSON.stringify(a):String(a)).join(' ') + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+  fileInput.addEventListener('change', e=>{
+    clearLog();
+    const f = e.target.files && e.target.files[0];
+    if(!f){ log('no file'); return; }
+    log('file:', f.name, f.type, Math.round(f.size/1024)+'KB');
+    if(!f.type.startsWith('image/')) { log('not an image according to file.type'); /* still try */ }
+
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      preview.src = ev.target.result;
+      preview.onload = ()=>{
+        // initial scale = cover the frame
+        const naturalW = preview.naturalWidth || preview.width;
+        const naturalH = preview.naturalHeight || preview.height;
+        if(!naturalW || !naturalH){
+          log('warning: natural size is zero', naturalW, naturalH);
+        }
+        // cover so no empty space
+        scale = Math.max(frameW / naturalW, frameH / naturalH);
+        // center
+offsetX = (frameW - naturalW * scale) / 2;
+        offsetY = (frameH - naturalH * scale) / 2;
+        updateTransform();
+        downloadBtn.disabled = true;
+        log('image loaded', {naturalW, naturalH, scale, offsetX, offsetY});
+      };
+      preview.onerror = () => {
+        log('preview.onerror — браузер не смог декодировать файл');
+      };
+    };
+    reader.onerror = err => { log('FileReader error', err); };
+    reader.readAsDataURL(f);
+  });
+
+  // pointer events for drag + pinch
+  frame.addEventListener('pointerdown', onPointerDown);
+  frame.addEventListener('pointermove', onPointerMove);
+  frame.addEventListener('pointerup', onPointerUp);
+  frame.addEventListener('pointercancel', onPointerUp);
+  frame.addEventListener('pointerout', onPointerUp);
+  frame.addEventListener('pointerleave', onPointerUp);
+
+  function onPointerDown(e){
+    frame.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, e);
+    if(pointers.size === 1){
+      // single pointer -> start drag
+      isDragging = true;
+      dragStartX = e.clientX - offsetX;
+      dragStartY = e.clientY - offsetY;
+    } else if(pointers.size === 2){
+      // start pinch
+      const pts = Array.from(pointers.values());
+      pinchStartDist = distanceBetween(pts[0], pts[1]);
+      pinchStartScale = scale;
+      // compute midpoint relative to frame for stable zoom-center
+      // store midpoint in page coords on map
+    }
+  }
+
+  function onPointerMove(e){
+    if(!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, e);
+
+    if(pointers.size === 1 && isDragging){
+      const p = pointers.values().next().value;
+      offsetX = p.clientX - dragStartX;
+      offsetY = p.clientY - dragStartY;
+      updateTransform();
+    } else if(pointers.size === 2){
+      const pts = Array.from(pointers.values());
+      const newDist = distanceBetween(pts[0], pts[1]);
+      if(pinchStartDist === 0) pinchStartDist = newDist;
+      let newScale = pinchStartScale * (newDist / pinchStartDist);
+      newScale = clamp(newScale, MIN_SCALE, MAX_SCALE);
+
+      // center point between two pointers, relative to frame:
+      const midPageX = (pts[0].clientX + pts[1].clientX)/2;
+      const midPageY = (pts[0].clientY + pts[1].clientY)/2;
+      const rect = frame.getBoundingClientRect();
+      const midX = midPageX - rect.left;
+      const midY = midPageY - rect.top;
+
+      // compute local image coordinate at midpoint before change:
+      const localX = (midX - offsetX) / scale;
+      const localY = (midY - offsetY) / scale;
+
+      // update scale, then adjust offset so that the same local point stays under the midpoint
+      const prevScale = scale;
+      scale = newScale;
+      offsetX = midX - localX * scale;
+      offsetY = midY - localY * scale;
+      updateTransform();
+    }
+  }
+
+  function onPointerUp(e){
+    try{ frame.releasePointerCapture(e.pointerId); } catch(_) {}
+    pointers.delete(e.pointerId);
+    if(pointers.size === 0){
+      isDragging = false;
+    } else if(pointers.size === 1){
+      // if one left, treat as dragging from current pointer
+      const remaining = pointers.values().next().value;
+      isDragging = true;
+      dragStartX = remaining.clientX - offsetX;
+      dragStartY = remaining.clientY - offsetY;
+    }
+  }
+
+  function distanceBetween(a,b){
+    const dx = a.clientX - b.clientX;
+    const dy = a.clientY - b.clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  // wheel zoom (desktop)
+  frame.addEventListener('wheel', e=>{
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    const rect = frame.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+
+    const newScale = clamp(scale + delta, MIN_SCALE, MAX_SCALE);
+    // keep px,py stable
+    const localX = (px - offsetX) / scale;
+    const localY = (py - offsetY) / scale;
+    scale = newScale;
+    offsetX = px - localX * scale;
+    offsetY = py - localY * scale;
+    updateTransform();
+  }, {passive:false});
+
+
+function updateTransform(){
+    preview.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    // optional: keep preview visible size for debugging
+    // debug data
+    logStateShort();
+  }
+
+  function logStateShort(){
+    // keep last line only to avoid huge log
+    // we still append to log for tracing, but also show concise
+    const last = `scale=${scale.toFixed(3)} offset=${Math.round(offsetX)},${Math.round(offsetY)} frame=${frameW}x${frameH}`;
+    // append single-line condensed
+    log('state:', last);
+  }
+
+  function clearLog(){
+    logEl.textContent = 'log:\n';
+  }
+
+  // crop
+  cropBtn.addEventListener('click', async ()=>{
+    if(!preview.src){ log('no image'); return; }
+    // wait until image decoded
+    try {
+      await preview.decode();
+    } catch(err){ log('decode failed (maybe SVG or too large)', err); /* continue */ }
+
+    // compute source rect in natural image pixels
+    const natW = preview.naturalWidth;
+    const natH = preview.naturalHeight;
+    if(!natW || !natH){ log('natural size missing', natW, natH); }
+
+    // the image is drawn at: displayX = offset + imgX * scale
+    // so the image pixel at frame-left (0) corresponds to imgX0 = (0 - offsetX)/scale
+    const sx = (0 - offsetX) / scale;
+    const sy = (0 - offsetY) / scale;
+    const sWidth = frameW / scale;
+    const sHeight = frameH / scale;
+
+    // clamp
+    let csx = Math.max(0, sx);
+    let csy = Math.max(0, sy);
+    let csw = sWidth;
+    let csh = sHeight;
+    if(csx + csw > natW) csw = Math.max(0, natW - csx);
+    if(csy + csh > natH) csh = Math.max(0, natH - csy);
+
+    if(csw <= 0 || csh <= 0){
+      log('вне области изображения: nothing to draw', {sx,sy,sWidth,sHeight, natW,natH});
+      // clear canvas
+      ctx.clearRect(0,0,result.width,result.height);
+      return;
+    }
+
+    // high DPI support
+    const outSize = result.width; // square canvas set in HTML
+    const dpr = window.devicePixelRatio || 1;
+    if(result._hiDPRApplied !== dpr){
+      result.width = outSize * dpr;
+      result.height = outSize * dpr;
+      result.style.width = outSize + 'px';
+      result.style.height = outSize + 'px';
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      result._hiDPRApplied = dpr;
+    }
+
+    // clear + clip circle
+    ctx.clearRect(0,0,result.width, result.height);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(outSize/2, outSize/2, outSize/2, 0, Math.PI*2);
+    ctx.closePath();
+    ctx.clip();
+
+    // drawImage(source sx,sy,sw,sh -> dest 0,0,outSize,outSize)
+    try{
+      ctx.drawImage(preview, csx, csy, csw, csh, 0, 0, outSize, outSize);
+      log('draw ok', {csx:Math.round(csx), csy:Math.round(csy), csw:Math.round(csw), csh:Math.round(csh)});
+      downloadBtn.disabled = false;
+    }catch(err){
+      log('drawImage failed', err);
+    } finally {
+      ctx.restore();
+    }
+  });
+
+  downloadBtn.addEventListener('click', ()=>{
+    const data = result.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = data;
+    a.download = 'avatar.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    if(!preview.src) return;
+    // reset to initial cover fit
+    const naturalW = preview.naturalWidth || preview.width;
+    const naturalH = preview.naturalHeight || preview.height;
+    scale = Math.max(frameW / naturalW, frameH / naturalH);
+    offsetX = (frameW - naturalW * scale) / 2;
+    offsetY = (frameH - naturalH * scale) / 2;
+    updateTransform();
+    downloadBtn.disabled = true;
+    log('reset');
+  });
+
+  // helpful hint: if user opens page via file:// and browser blocks something, console will show.
+  log('ready — frame', frameW, 'x', frameH, 'TouchSupport:', ('ontouchstart' in window));
+})();
+</script>
+</body>
+</html>
