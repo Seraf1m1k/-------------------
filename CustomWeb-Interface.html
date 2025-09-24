@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Кастомизируемый интерфейс с сохранением</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+  }
+  #settings {
+    width: 250px;
+    background: #222;
+    color: #fff;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  #settings h2 { font-size: 18px; margin-top: 0; }
+  #settings label { display: block; margin: 10px 0 5px; font-size: 14px; }
+  #settings input[type="color"],
+  #settings input[type="range"],
+  #settings select { width: 100%; margin-bottom: 10px; }
+
+  #content {
+    flex: 1;
+    padding: 20px;
+    transition: all 0.3s;
+  }
+  .block {
+    padding: 20px;
+    margin-bottom: 15px;
+    background: #fff;
+    border-radius: 6px;
+    transition: all 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<div id="settings">
+  <h2>Настройки интерфейса</h2>
+
+  <label for="bgColor">Фон страницы</label>
+  <input type="color" id="bgColor">
+
+  <label for="blockColor">Цвет блоков</label>
+  <input type="color" id="blockColor">
+
+  <label for="fontSelect">Шрифт</label>
+  <select id="fontSelect">
+    <option value="Arial">Arial</option>
+    <option value="Verdana">Verdana</option>
+    <option value="Tahoma">Tahoma</option>
+    <option value="Courier New">Courier New</option>
+  </select>
+
+  <label for="blockRadius">Скругление блоков</label>
+  <input type="range" id="blockRadius" min="0" max="50">
+</div>
+
+<div id="content">
+  <div class="block">Блок 1 — текстовый контент</div>
+  <div class="block">Блок 2 — ещё немного текста</div>
+  <div class="block">Блок 3 — демонстрация кастомизации</div>
+</div>
+
+<script>
+  const bgColorInput = document.getElementById('bgColor');
+  const blockColorInput = document.getElementById('blockColor');
+  const fontSelect = document.getElementById('fontSelect');
+  const blockRadiusInput = document.getElementById('blockRadius');
+  const content = document.getElementById('content');
+  const blocks = document.querySelectorAll('.block');
+
+  // Сохранение настроек в localStorage
+  function saveSetting(key, value){
+    localStorage.setItem(key, value);
+  }
+
+  function loadSetting(key, defaultValue){
+    return localStorage.getItem(key) || defaultValue;
+  }
+
+  function applySettings(){
+    const bg = loadSetting('bgColor','#f0f0f0');
+    const blockColor = loadSetting('blockColor','#ffffff');
+    const font = loadSetting('font','Arial');
+    const radius = loadSetting('blockRadius','6');
+
+    bgColorInput.value = bg;
+    blockColorInput.value = blockColor;
+    fontSelect.value = font;
+    blockRadiusInput.value = radius;
+
+    content.style.background = bg;
+    blocks.forEach(b => b.style.background = blockColor);
+    content.style.fontFamily = font;
+    blocks.forEach(b => b.style.borderRadius = radius + 'px');
+  }
+
+  bgColorInput.addEventListener('input', () => {
+    content.style.background = bgColorInput.value;
+    saveSetting('bgColor', bgColorInput.value);
+  });
+
+  blockColorInput.addEventListener('input', () => {
+    blocks.forEach(b => b.style.background = blockColorInput.value);
+    saveSetting('blockColor', blockColorInput.value);
+  });
+
+  fontSelect.addEventListener('change', () => {
+    content.style.fontFamily = fontSelect.value;
+    saveSetting('font', fontSelect.value);
+  });
+
+  blockRadiusInput.addEventListener('input', () => {
+    blocks.forEach(b => b.style.borderRadius = blockRadiusInput.value + 'px');
+    saveSetting('blockRadius', blockRadiusInput.value);
+  });
+
+  // Применяем сохранённые настройки при загрузке
+  applySettings();
+</script>
+
+</body>
+</html>
