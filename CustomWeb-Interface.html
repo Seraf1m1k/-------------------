@@ -1,128 +1,276 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<title>Кастомизируемый интерфейс с сохранением</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Тема — live preview + JSON save/load</title>
 <style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    display: flex;
+  :root{
+    --text-color: #000000;
+    --bg-color: #ffffff;
+    --font-family: Arial, sans-serif;
+    --font-size: 16px;
+    --letter-spacing: 0px;
   }
-  #settings {
-    width: 250px;
-    background: #222;
-    color: #fff;
-    padding: 20px;
-    box-sizing: border-box;
-  }
-  #settings h2 { font-size: 18px; margin-top: 0; }
-  #settings label { display: block; margin: 10px 0 5px; font-size: 14px; }
-  #settings input[type="color"],
-  #settings input[type="range"],
-  #settings select { width: 100%; margin-bottom: 10px; }
 
-  #content {
-    flex: 1;
-    padding: 20px;
-    transition: all 0.3s;
+  html,body{
+    height:100%;
+    margin:0;
   }
-  .block {
-    padding: 20px;
-    margin-bottom: 15px;
-    background: #fff;
-    border-radius: 6px;
-    transition: all 0.3s;
+
+  body{
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    letter-spacing: var(--letter-spacing);
+    transition: background .18s ease, color .18s ease, font-size .12s ease;
+    display:flex;
+    gap:20px;
+    padding:20px;
+    align-items:flex-start;
   }
+
+  .controls {
+    width:320px;
+    background:#f7f7f7;
+    border-radius:8px;
+    padding:12px;
+    box-shadow:0 8px 18px rgba(0,0,0,0.08);
+    box-sizing:border-box;
+  }
+
+  .controls h3{ margin:6px 0 12px; font-size:16px; }
+  label{ display:block; font-size:13px; margin:8px 0 4px; color:#333; }
+  .row{ display:flex; gap:8px; align-items:center; }
+  input[type="color"], select, input[type="range"], input[type="file"]{ width:100%; }
+  .small{ width:88px; flex: 0 0 88px; }
+
+  .preview {
+    flex:1;
+    max-width:900px;
+  }
+
+  .card{
+    background: rgba(255,255,255,0.6);
+    border-radius:10px;
+    padding:18px;
+    margin-bottom:14px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+    color: inherit;
+  }
+
+  .status {
+    margin-top:8px;
+    font-size:13px;
+    color:#444;
+  }
+
+  .valueLabel { font-weight:600; margin-left:8px; color:#111; }
+  button { padding:8px 10px; border-radius:6px; border:none; cursor:pointer; }
+  button.primary { background:#1976d2; color:white; }
+  button.ghost { background:#eee; color:#222; }
 </style>
 </head>
 <body>
 
-<div id="settings">
-  <h2>Настройки интерфейса</h2>
+  <div class="controls">
+    <h3>Настройки темы (live preview)</h3>
 
-  <label for="bgColor">Фон страницы</label>
-  <input type="color" id="bgColor">
+    <label>Цвет текста</label>
+    <input type="color" id="textColor" value="#000000">
 
-  <label for="blockColor">Цвет блоков</label>
-  <input type="color" id="blockColor">
+    <label>Фон</label>
+    <input type="color" id="bgColor" value="#ffffff">
 
-  <label for="fontSelect">Шрифт</label>
-  <select id="fontSelect">
-    <option value="Arial">Arial</option>
-    <option value="Verdana">Verdana</option>
-    <option value="Tahoma">Tahoma</option>
-    <option value="Courier New">Courier New</option>
-  </select>
+    <label>Шрифт</label>
+    <select id="fontFamily">
+      <option value="Arial, sans-serif">Arial</option>
+      <option value="Verdana, Geneva, sans-serif">Verdana</option>
+      <option value="Tahoma, sans-serif">Tahoma</option>
+      <option value="'Courier New', monospace">Courier New</option>
+      <option value="Georgia, serif">Georgia</option>
+      <option value="'Times New Roman', serif">Times New Roman</option>
+      <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+      <option value="'Lucida Console', monospace">Lucida Console</option>
+      <option value="'Segoe UI', sans-serif">Segoe UI</option>
+      <option value="'Roboto', sans-serif">Roboto (if installed)</option>
+    </select>
 
-  <label for="blockRadius">Скругление блоков</label>
-  <input type="range" id="blockRadius" min="0" max="50">
-</div>
+    <label>Размер шрифта: <span id="fontSizeLabel" class="valueLabel">16px</span></label>
+    <input type="range" id="fontSize" min="10" max="48" value="16">
 
-<div id="content">
-  <div class="block">Блок 1 — текстовый контент</div>
-  <div class="block">Блок 2 — ещё немного текста</div>
-  <div class="block">Блок 3 — демонстрация кастомизации</div>
-</div>
+    <label>Межбуквенное расстояние: <span id="letterSpacingLabel" class="valueLabel">0px</span></label>
+    <input type="range" id="letterSpacing" min="0" max="12" value="0">
 
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button id="saveTheme" class="primary">Сохранить тему (.json)</button>
+      <label class="ghost" style="display:inline-block; padding:8px 10px; border-radius:6px; background:#eee; cursor:pointer;">
+        Загрузить .json
+        <input id="loadFile" type="file" accept=".json" style="display:none">
+      </label>
+    </div>
+
+    <div class="status" id="status">Готово — изменения применяются автоматически.</div>
+  </div>
+
+  <div class="preview">
+    <div class="card">
+      <h1>Заголовок — live preview</h1>
+      <p>Это демонстрационный текст. Меняйте настройки слева — вы увидите изменения мгновенно: цвет, шрифт, размер и межбуквенное расстояние.</p>
+    </div>
+
+    <div class="card">
+      <h2>Ещё пример</h2>
+      <p>Используйте кнопку «Сохранить тему», чтобы скачать JSON с текущими настройками. Затем можно загрузить этот JSON на той же странице — тема будет применена и инпуты обновятся.</p>
+    </div>
+  </div>
 <script>
-  const bgColorInput = document.getElementById('bgColor');
-  const blockColorInput = document.getElementById('blockColor');
-  const fontSelect = document.getElementById('fontSelect');
-  const blockRadiusInput = document.getElementById('blockRadius');
-  const content = document.getElementById('content');
-  const blocks = document.querySelectorAll('.block');
+(function(){
+  const root = document.documentElement;
+  const status = document.getElementById('status');
 
-  // Сохранение настроек в localStorage
-  function saveSetting(key, value){
-    localStorage.setItem(key, value);
+  const inputs = {
+    textColor: document.getElementById('textColor'),
+    bgColor: document.getElementById('bgColor'),
+    fontFamily: document.getElementById('fontFamily'),
+    fontSize: document.getElementById('fontSize'),
+    letterSpacing: document.getElementById('letterSpacing'),
+  };
+
+  const fontSizeLabel = document.getElementById('fontSizeLabel');
+  const letterSpacingLabel = document.getElementById('letterSpacingLabel');
+
+  // Read values from inputs and return plain object (numbers where appropriate)
+  function readThemeFromInputs(){
+    return {
+      textColor: inputs.textColor.value,
+      bgColor: inputs.bgColor.value,
+      fontFamily: inputs.fontFamily.value,
+      fontSize: Number(inputs.fontSize.value),         // numeric
+      letterSpacing: Number(inputs.letterSpacing.value) // numeric
+    };
   }
 
-  function loadSetting(key, defaultValue){
-    return localStorage.getItem(key) || defaultValue;
+  // Apply theme object to CSS variables (live)
+  function applyTheme(theme){
+    // normalize theme (support both numeric and "16px")
+    const size = typeof theme.fontSize === 'string' ? parseInt(theme.fontSize) : theme.fontSize;
+    const spacing = typeof theme.letterSpacing === 'string' ? parseInt(theme.letterSpacing) : theme.letterSpacing;
+
+    root.style.setProperty('--text-color', theme.textColor || '#000');
+    root.style.setProperty('--bg-color', theme.bgColor || '#fff');
+    root.style.setProperty('--font-family', theme.fontFamily || 'Arial, sans-serif');
+    root.style.setProperty('--font-size', (Number.isFinite(size) ? size : 16) + 'px');
+    root.style.setProperty('--letter-spacing', (Number.isFinite(spacing) ? spacing : 0) + 'px');
+
+    // update labels
+    fontSizeLabel.textContent = (Number.isFinite(size) ? size : 16) + 'px';
+    letterSpacingLabel.textContent = (Number.isFinite(spacing) ? spacing : 0) + 'px';
+
+    status.textContent = 'Тема применена: ' + new Date().toLocaleTimeString();
   }
 
-  function applySettings(){
-    const bg = loadSetting('bgColor','#f0f0f0');
-    const blockColor = loadSetting('blockColor','#ffffff');
-    const font = loadSetting('font','Arial');
-    const radius = loadSetting('blockRadius','6');
-
-    bgColorInput.value = bg;
-    blockColorInput.value = blockColor;
-    fontSelect.value = font;
-    blockRadiusInput.value = radius;
-
-    content.style.background = bg;
-    blocks.forEach(b => b.style.background = blockColor);
-    content.style.fontFamily = font;
-    blocks.forEach(b => b.style.borderRadius = radius + 'px');
+  // Called on each input change — reads inputs and applies
+  function onInputChange(){
+    const theme = readThemeFromInputs();
+    applyTheme(theme);
   }
 
-  bgColorInput.addEventListener('input', () => {
-    content.style.background = bgColorInput.value;
-    saveSetting('bgColor', bgColorInput.value);
+  // Attach listeners (input for live updates)
+  Object.values(inputs).forEach(el => {
+    el.addEventListener('input', onInputChange);
   });
 
-  blockColorInput.addEventListener('input', () => {
-    blocks.forEach(b => b.style.background = blockColorInput.value);
-    saveSetting('blockColor', blockColorInput.value);
+  // Save JSON
+  document.getElementById('saveTheme').addEventListener('click', ()=>{
+    const theme = readThemeFromInputs();
+    const blob = new Blob([JSON.stringify(theme, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'theme.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    status.textContent = 'Тема скачана';
   });
 
-  fontSelect.addEventListener('change', () => {
-    content.style.fontFamily = fontSelect.value;
-    saveSetting('font', fontSelect.value);
+  // Load JSON from file input
+  document.getElementById('loadFile').addEventListener('change', (e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try{
+        const parsed = JSON.parse(ev.target.result);
+        // Basic validation & normalization:
+        const theme = {
+          textColor: parsed.textColor || parsed.text || '#000000',
+          bgColor: parsed.bgColor || parsed.bg || '#ffffff',
+          fontFamily: parsed.fontFamily || parsed.font || 'Arial, sans-serif',
+          fontSize: parsed.fontSize ?? parsed.font_size ?? parsed.size ?? 16,
+          letterSpacing: parsed.letterSpacing ?? parsed.letter_spacing ?? parsed.spacing ?? 0
+        };
+
+        // update input controls (string values)
+        inputs.textColor.value = theme.textColor;
+        inputs.bgColor.value = theme.bgColor;
+        // try to find exact match in select, otherwise set value (works even if custom font)
+        const optFound = Array.from(inputs.fontFamily.options).some(opt => opt.value === theme.fontFamily);
+
+if(optFound){
+          inputs.fontFamily.value = theme.fontFamily;
+        } else {
+          // add temporary option
+          const t = document.createElement('option');
+          t.value = theme.fontFamily;
+          t.textContent = theme.fontFamily + ' (custom)';
+          inputs.fontFamily.appendChild(t);
+          inputs.fontFamily.value = theme.fontFamily;
+        }
+        inputs.fontSize.value = parseInt(theme.fontSize) || 16;
+        inputs.letterSpacing.value = parseInt(theme.letterSpacing) || 0;
+
+        // apply to page
+        applyTheme(theme);
+        status.textContent = 'Тема загружена из файла';
+      }catch(err){
+        status.textContent = 'Ошибка парсинга JSON: ' + err.message;
+        console.error(err);
+      } finally {
+        // clear file input so same file can be reselected later
+        e.target.value = '';
+      }
+    };
+    reader.onerror = (err) => {
+      status.textContent = 'Ошибка чтения файла';
+      console.error(err);
+    };
+    reader.readAsText(f);
   });
 
-  blockRadiusInput.addEventListener('input', () => {
-    blocks.forEach(b => b.style.borderRadius = blockRadiusInput.value + 'px');
-    saveSetting('blockRadius', blockRadiusInput.value);
-  });
+  // Apply default theme on start (and ensure inputs reflect defaults)
+  function applyDefault(){
+    const def = {
+      textColor: inputs.textColor.value,
+      bgColor: inputs.bgColor.value,
+      fontFamily: inputs.fontFamily.value,
+      fontSize: Number(inputs.fontSize.value),
+      letterSpacing: Number(inputs.letterSpacing.value)
+    };
+    applyTheme(def);
+  }
 
-  // Применяем сохранённые настройки при загрузке
-  applySettings();
+  // init
+  applyDefault();
+
+  // helpful: expose for debugging in console
+  window.__themeApply = applyTheme;
+  window.__themeReadInputs = readThemeFromInputs;
+
+})();
 </script>
-
 </body>
 </html>
