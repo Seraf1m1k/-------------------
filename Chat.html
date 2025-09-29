@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Neural Network</title>
+    <!-- Подключение emoji-mart для пикера смайликов -->
+    <script src="https://cdn.jsdelivr.net/npm/emoji-mart@latest/dist/browser.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/emoji-mart@latest/css/emoji-mart.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            height: 100vh;
+            overflow: hidden; /* Предотвращает прокрутку тела */
+        }
+        #sidebar {
+            width: 250px;
+            background-color: #1e1e1e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        #sidebar h2 {
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        .chat-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            background-color: #333;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .chat-item:hover, .chat-item.active {
+            background-color: #007bff;
+        }
+        #userAccount {
+            margin-top: auto; /* Прижимает к низу */
+            padding: 10px;
+            border-top: 1px solid #333;
+            display: flex;
+            align-items: center;
+        }
+        #userAvatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        #userInfo {
+            flex: 1;
+        }
+        #userName {
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        #progressContainer {
+            margin-top: 5px;
+        }
+        #progressBar {
+            width: 100%;
+            height: 8px;
+            background-color: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #progressFill {
+            height: 100%;
+            background-color: #007bff;
+            width: 50%; /* Начальное значение, можно менять динамически */
+            transition: width 0.3s;
+        }
+        #main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #1e1e1e;
+            border-bottom: 1px solid #333;
+        }
+        header h1 {
+            font-size: 1.5rem;
+        }
+        #newChatBtn, #toggleSidebarBtn, #settingsBtn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        #newChatBtn:hover, #toggleSidebarBtn:hover, #settingsBtn:hover {
+            background-color: #0056b3;
+        }
+        #chatContainer {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex; /* Добавлено для корректного позиционирования сообщений */
+            flex-direction: column; /* Сообщения в колонку */
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        .user {
+            background-color: #007bff;
+            align-self: flex-end; /* Пользователь справа */
+            text-align: right;
+            border-radius: 10px 10px 0px 10px;
+        }
+        .bot {
+            background-color: #333;
+            align-self: flex-start; /* Бот слева */
+            border-radius: 10px 10px 10px 0px;
+        }
+        #inputContainer {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #1e1e1e;
+            border-top: 1px solid #333;
+        }
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background-color: #222;
+            color: #fff;
+        }
+        #emojiBtn, #stickerBtn, #sendBtn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px;
+            margin-left: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #emojiBtn:hover, #stickerBtn:hover, #sendBtn:hover {
+            background-color: #218838;
+        }
+        #emojiPicker {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            display: none;
+        }
+        #stickerPicker {
+            position: absolute;
+            bottom: 60px;
+            right: 20px;
+            display: none;
+            background-color: #222;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .sticker {
+            width: 50px;
+            height: 50px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        /* Overlay для закрытия sidebar */
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            z-index: 999;
+        }
+        /* Модальное окно настроек */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1001;
+            display: none;
+        }
+        .modal-content {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            color: #fff;
+        }
+        .modal-content h3 {
+            margin-bottom: 15px;
+        }
+        .setting-item {
+            margin-bottom: 15px;
+        }
+        .setting-item label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .setting-item select, .setting-item input[type="checkbox"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            background-color: #222;
+            color: #fff;
+        }
+        .setting-item input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+        }
+        #closeModal {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        #closeModal:hover {
+            background-color: #c82333;
+        }
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: fixed;
+                left: -250px;
+                top: 0;
+                height: 100%;
+                transition: left 0.3s;
+                z-index: 1000;
+            }
+            #sidebar.open {
+                left: 0;
+            }
+            #main {
+                width: 100%;
+            }
+            header {
+                padding: 10px;
+            }
+            header h1 {
+                font-size: 1.2rem;
+            }
+            #chatContainer {
+                padding: 10px;
+            }
+            .message {
+                max-width: 90%;
+            }
+            #inputContainer {
+                padding: 10px;
+            }
+            #emojiPicker, #stickerPicker {
+                right: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Overlay для мобильных -->
+    <div id="overlay"></div>
+    <!-- Модальное окно настроек -->
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <h3>Настройки</h3>
+            <div class="setting-item">
+                <label for="languageSelect">Язык:</label>
+                <select id="languageSelect">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label for="themeToggle">Тема:</label>
+                <input type="checkbox" id="themeToggle" checked> Темная тема
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="notificationsToggle"> Включить уведомления
+                </label>
+            </div>
+            <div class="setting-item">
+                <label>
+                    <input type="checkbox" id="autoSaveToggle"> Автосохранение чатов
+                </label>
+            </div>
+            <button id="closeModal">Закрыть</button>
+        </div>
+    </div>
+    <div id="sidebar">
+        <h2>Chats</h2>
+        <div id="chatList"></div>
+        <!-- Блок аккаунта -->
+        <div id="userAccount">
+            <img id="userAvatar" src="https://via.placeholder.com/40?text=U" alt="Avatar">
+            <div id="userInfo">
+                <div id="userName">User</div>
+                <div id="progressContainer">
+                    <div id="progressBar">
+                        <div id="progressFill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="main">
+        <header>
+            <button id="toggleSidebarBtn" style="display: none;">☰</button> <!-- Для мобильных -->
+            <h1>Chat with Neural Network</h1>
+            <div>
+                <button id="settingsBtn">⚙️</button>
+                <button id="newChatBtn">New Chat</button>
+            </div>
+        </header>
+        <div id="chatContainer"></div>
+        <div id="inputContainer">
+            <input type="text" id="messageInput" placeholder="Type your message...">
+            <button id="emojiBtn">😊</button>
+            <button id="stickerBtn">🎭</button>
+            <button id="sendBtn">Send</button>
+        </div>
+        <!-- Пикеры -->
+        <div id="emojiPicker" style="display: none;"></div>
+        <div id="stickerPicker" style="display: none;"></div>
+    </div>
+
+    <script>
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
+        const chatList = document.getElementById('chatList');
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const newChatBtn = document.getElementById('newChatBtn');
+        const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
+        const emojiBtn = document.getElementById('emojiBtn');
+        const stickerBtn = document.getElementById('stickerBtn');
+        const emojiPicker = document.getElementById('emojiPicker');
+        const stickerPicker = document.getElementById('stickerPicker');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeModal = document.getElementById('closeModal');
+        const languageSelect = document.getElementById('languageSelect');
+        const themeToggle = document.getElementById('themeToggle');
+        const notificationsToggle = document.getElementById('notificationsToggle');
+        const autoSaveToggle = document.getElementById('autoSaveToggle');
+
+        let chats = []; // Массив чатов: [{id, name, messages: []}]
+        let currentChatId = null;
+
+        // Функция для добавления сообщения
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            // Сохраняем в текущий чат
+            if (currentChatId !== null) {
+                const chat = chats.find(c => c.id === currentChatId);
+                chat.messages.push({ text, sender });
+            }
+        }
+
+        // Функция для загрузки чата
+        function loadChat(chatId) {
+            const chat = chats.find(c => c.id === chatId);
+            if (chat) {
+                currentChatId = chatId;
+                chatContainer.innerHTML = '';
+                chat.messages.forEach(msg => addMessage(msg.text, msg.sender));
+                updateSidebar();
+            }
+        }
+
+        // Обновление sidebar
+        function updateSidebar() {
+            chatList.innerHTML = '';
+            chats.forEach(chat => {
+                const item = document.createElement('div');
+                item.classList.add('chat-item');
+                item.textContent = chat.name;
+                if (chat.id === currentChatId) item.classList.add('active');
+                item.addEventListener('click', () => loadChat(chat.id));
+                chatList.appendChild(item);
+            });
+        }
+
+        // Создание нового чата
+        function createNewChat() {
+            const chatId = Date.now(); // Уникальный ID
+            const chatName = `Chat ${chats.length + 1}`;
+            chats.push({ id: chatId, name: chatName, messages: [] });
+            loadChat(chatId);
+            addMessage('New chat started. How can I help?', 'bot');
+            // Показываем sidebar, если скрыт
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('open');
+            }
+        }
+
+        // Отправка сообщения
+        async function sendMessage(userMessage) {
+            addMessage(userMessage, 'user');
+            messageInput.value = '';
+
+            // Симуляция ответа (замените на API)
+            setTimeout(() => {
+                addMessage('Simulated response.', 'bot');
+            }, 1000);
+        }
+
+        // Функция для открытия/закрытия sidebar
+        function toggleSidebar() {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.toggle('open');
+                overlay.style.display = sidebar.classList.contains('open') ? 'block' : 'none';
+            }
+        }
+
+        // Закрытие sidebar по клику вне (на overlay или main)
+        overlay.addEventListener('click', toggleSidebar);
+        // Дополнительный listener для клика вне sidebar (включая main область)
+        document.addEventListener('click', (e) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== toggleSidebarBtn) {
+                toggleSidebar();
+            }
+        });
+
+        // Открытие модального окна настроек
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.style.display = 'flex';
+        });
+
+        // Закрытие модального окна
+        closeModal.addEventListener('click', () => {
+            settingsModal.style.display = 'none';
+        });
+
+        // Закрытие по клику вне модального окна
+        window.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        });
+
+        // Обработчики для настроек (симуляция, можно добавить логику)
+        languageSelect.addEventListener('change', (e) => {
+            console.log('Language changed to:', e.target.value);
+            // Здесь можно добавить логику смены языка
+        });
+
+        themeToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                document.body.style.backgroundColor = '#121212';
+                document.body.style.color = '#ffffff';
+                // Дополнительные стили для темной темы
+            } else {
+                document.body.style.backgroundColor = '#ffffff';
+                document.body.style.color = '#000000';
+                // Дополнительные стили для светлой темы
+            }
+        });
+
+        notificationsToggle.addEventListener('change', (e) => {
+            console.log('Notifications:', e.target.checked);
+            // Логика для уведомлений
+        });
+
+        autoSaveToggle.addEventListener('change', (e) => {
+            console.log('Auto save:', e.target.checked);
+            // Логика для автосохранения
+        });
+
+        // Пикер смайликов
+        emojiBtn.addEventListener('click', () => {
+            if (emojiPicker.style.display === 'none') {
+                emojiPicker.style.display = 'block';
+                // Инициализация emoji-mart
+                emojiPicker.innerHTML = '';
+                const picker = new EmojiMart.Picker({
+                    onEmojiSelect: (emoji) => {
+                        messageInput.value += emoji.native;
+                        emojiPicker.style.display = 'none';
+                    }
+                });
+                emojiPicker.appendChild(picker);
+            } else {
+                emojiPicker.style.display = 'none';
+            }
+        });
+
+        // Пикер стикеров (симуляция)
+        stickerBtn.addEventListener('click', () => {
+            if (stickerPicker.style.display === 'none') {
+                stickerPicker.style.display = 'block';
+                // Симуляция стикеров (замените на реальные из Telegram API)
+                stickerPicker.innerHTML = '<p>Loading stickers...</p>';
+                // Пример интеграции с Telegram:
+                // Предполагаем, что пользователь авторизован и у вас есть access_token
+                // fetch('https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUserProfilePhotos?user_id=<USER_ID>')
+                //   .then(res => res.json())
+                //   .then(data => {
+                //       // Обработайте стикеры и отобразите
+                //   });
+                setTimeout(() => {
+                    stickerPicker.innerHTML = '';
+                    // Placeholder-стикеры
+                    for (let i = 1; i <= 5; i++) {
+                        const img = document.createElement('img');
+                        img.src = `https://via.placeholder.com/50?text=Sticker${i}`; // Замените на реальные URL стикеров
+                        img.classList.add('sticker');
+                        img.addEventListener('click', () => {
+                            addMessage(`[Sticker ${i}]`, 'user'); // Отправляем как сообщение
+                            stickerPicker.style.display = 'none';
+                        });
+                        stickerPicker.appendChild(img);
+                    }
+                }, 500);
+            } else {
+                stickerPicker.style.display = 'none';
+            }
+        });
+
+        // Обработчики
+        sendBtn.addEventListener('click', () => {
+            const message = messageInput.value.trim();
+            if (message) sendMessage(message);
+        });
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendBtn.click();
+        });
+        newChatBtn.addEventListener('click', createNewChat);
+        toggleSidebarBtn.addEventListener('click', toggleSidebar);
+
+        // Адаптивность: Показывать кнопку toggle на мобильных
+        window.addEventListener('resize', () => {
+            if (window.innerWidth <= 768) {
+                toggleSidebarBtn.style.display = 'block';
+                sidebar.classList.remove('open');
+                overlay.style.display = 'none';
+            } else {
+                toggleSidebarBtn.style.display = 'none';
+                sidebar.classList.remove('open'); // Всегда открыт на ПК
+                overlay.style.display = 'none';
+            }
+        });
+        window.dispatchEvent(new Event('resize')); // Инициализация
+
+        // Инициализация
+        createNewChat(); // Стартуем с первым чатом
+    </script>
+</body>
+</html>
